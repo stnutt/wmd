@@ -699,27 +699,6 @@ void handle_event(XEvent *event) {
             if (event->xconfigure.window == root &&
                 (screen_width != event->xconfigure.width ||
                  screen_height != event->xconfigure.height)) {
-                Window *docks = NULL;
-                unsigned int ndocks;
-                Window dock;
-                XWindowAttributes attributes;
-                XWindowChanges changes;
-                ndocks = get_windows(&is_dock_window, &docks);
-                for (unsigned int i = 0; i < ndocks; i++) {
-                    dock = docks[i];
-                    if (XGetWindowAttributes(display, dock, &attributes)) {
-                        if (attributes.width == screen_width) {
-                            changes.width = event->xconfigure.width;
-                            XConfigureWindow(display, dock, CWWidth, &changes);
-                        } else if (attributes.height == screen_height) {
-                            changes.height = event->xconfigure.height;
-                            XConfigureWindow(display, dock, CWHeight, &changes);
-                        }
-                    }
-                }
-                if (docks) {
-                    XFree(docks);
-                }
                 screen_width = event->xconfigure.width;
                 screen_height = event->xconfigure.height;
                 fputc('W', fifo);
