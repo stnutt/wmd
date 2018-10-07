@@ -17,6 +17,7 @@
 /* https://tronche.com/gui/x/xlib/ */
 /* https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html */
 
+#define FLAG_ROOT       "r"
 #define FLAG_FULLSCREEN "f"
 #define FLAG_ABOVE      "t"
 #define FLAG_POINTER    "p"
@@ -536,7 +537,7 @@ void activate_window(Window window) {
             send_protocol(window, wm_atoms[WM_TAKE_FOCUS]);
             set_window_property(root, net_atoms[_NET_ACTIVE_WINDOW], window);
             fputc('W', fifo);
-            print_window(fifo, window, "");
+            print_window(fifo, window, FLAG_ACTIVE);
         }
     } else if (active) {
         set_window_property(root, net_atoms[_NET_ACTIVE_WINDOW], None);
@@ -582,7 +583,8 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
         restart = true;
         fprintf(response, "%c", '0');
     } else if (!strcmp(args[0], "root")) {
-        print_window(response, root, "");
+        fprintf(response, "%c", '0');
+        print_window(response, root, FLAG_ROOT);
     } else if (!strcmp(args[0], "windows")) {
         Window *windows = NULL;
         unsigned int nwindows;
@@ -720,8 +722,8 @@ void handle_event(XEvent *event) {
                 }
                 screen_width = event->xconfigure.width;
                 screen_height = event->xconfigure.height;
-                fputc('R', fifo);
-                print_window(fifo, root, "");
+                fputc('W', fifo);
+                print_window(fifo, root, FLAG_ROOT);
             }
             break;
         case PropertyNotify:
@@ -730,7 +732,7 @@ void handle_event(XEvent *event) {
                  event->xproperty.atom == net_atoms[_NET_WM_NAME]) &&
                 window == get_active_window()) {
                 fputc('W', fifo);
-                print_window(fifo, event->xproperty.window, "");
+                print_window(fifo, event->xproperty.window, FLAG_ACTIVE);
             }
             /* else if (event->xproperty.atom == net_atoms[_NET_WM_STATE] && */
             /*            is_managed_window(window)) { */
@@ -827,7 +829,7 @@ int main(int argc, char *argv[]) {
     screen_height = XDisplayHeight(display, screen);
     root = RootWindow(display, screen);
     read_resources();
-    XSelectInput(display, root, SubstructureNotifyMask|SubstructureRedirectMask|FocusChangeMask);
+    XSelectInput(display, root, StructureNotifyMask|SubstructureNotifyMask|SubstructureRedirectMask|FocusChangeMask);
 
     wm_atoms[WM_PROTOCOLS] = XInternAtom(display, "WM_PROTOCOLS", false);
     wm_atoms[WM_TAKE_FOCUS] = XInternAtom(display, "WM_TAKE_FOCUS", false);
@@ -901,8 +903,8 @@ int main(int argc, char *argv[]) {
                     XInternAtom(display, "UTF8_STRING", false), 8,
                     PropModeReplace, (unsigned char *) "wmd", 3);
 
-    fputc('R', fifo);
-    print_window(fifo, root, "");
+    fputc('W', fifo);
+    print_window(fifo, root, FLAG_ROOT);
 
     while(!restart && !quit) {
         FD_ZERO(&fds);
