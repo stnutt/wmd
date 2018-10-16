@@ -332,7 +332,7 @@ bool is_managed_window(Window window) {
 
     hints = NULL;
 
-    bool ret = true;
+    bool managed = true;
 
     /* TODO ignore if no hints */
 
@@ -343,14 +343,14 @@ bool is_managed_window(Window window) {
         attributes.map_state != IsViewable ||
         /* ((hints = XGetWMHints(display, window)) && !hints->input) || */
         is_dock_window(window)) {
-        ret = false;
+        managed = false;
     }
 
     if (hints) {
         XFree(hints);
     }
 
-    return ret;
+    return managed;
 }
 
 bool is_above_window(Window window) {
@@ -584,7 +584,7 @@ void activate_window(Window window) {
         }
     } else if (active) {
         set_window_property(root, net_atoms[_NET_ACTIVE_WINDOW], None);
-        fprintf(fifo, "W\n");
+        fprintf(fifo, "W0x%08lx\n", None);
     }
     fflush(fifo);
 }
@@ -673,7 +673,8 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
             fprintf(response, "%c", '0');
         }
         for (; i < args_len; i++) {
-            if (!sscanf(args[i], "0x%lx", &window)) {
+            if (!sscanf(args[i], "0x%lx", &window) &&
+                !sscanf(args[i], "%lu", &window)) {
             } else if (!is_managed_window(window)) {
             } else if (!strcmp(args[0], "activate")) {
                 activate_window(window);
@@ -880,7 +881,7 @@ int main(int argc, char *argv[]) {
     screen_height = XDisplayHeight(display, screen);
     root = RootWindow(display, screen);
     read_resources();
-    XSelectInput(display, root, StructureNotifyMask|SubstructureNotifyMask|SubstructureRedirectMask|FocusChangeMask);
+    XSelectInput(display, root, StructureNotifyMask|SubstructureRedirectMask|FocusChangeMask);
 
     wm_atoms[WM_PROTOCOLS] = XInternAtom(display, "WM_PROTOCOLS", false);
     wm_atoms[WM_TAKE_FOCUS] = XInternAtom(display, "WM_TAKE_FOCUS", false);
