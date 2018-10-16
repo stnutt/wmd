@@ -715,15 +715,35 @@ Window map_window(XMapRequestEvent *request)
 
 void configure_window(XConfigureRequestEvent *request)
 {
+    Window window = request->window;
     XWindowChanges changes;
+    unsigned value_mask = request->value_mask;
     changes.x = request->x;
     changes.y = request->y;
     changes.width = request->width;
     changes.height = request->height;
     changes.border_width = request->border_width;
-    changes.sibling = request->above;
+    if (value_mask & CWStackMode &&
+        request->detail == Above &&
+        request->above == None) {
+        Window *windows = NULL;
+        unsigned int nwindows;
+        nwindows = get_windows(&is_not_above_window, &windows);
+        for (unsigned int i = 0; i < nwindows; i++) {
+            if (windows[i] != window) {
+                changes.sibling = windows[i];
+                value_mask |= CWSibling;
+                break;
+            }
+        }
+        if (windows) {
+            XFree(windows);
+        }
+    } else {
+        changes.sibling = request->above;
+    }
     changes.stack_mode = request->detail;
-    XConfigureWindow(display, request->window, request->value_mask, &changes);
+    XConfigureWindow(display, window, value_mask, &changes);
 }
 
 void handle_event(XEvent *event) {
