@@ -338,8 +338,7 @@ unsigned int get_windows(bool (*predicate)(Window), Window **windows) {
     XQueryTree(display, root, &root, &parent, &children, &nchildren);
 
     nwindows = 0;
-    for (unsigned int i = 0; i < nchildren; i++)
-    {
+    for (unsigned int i = 0; i < nchildren; i++) {
         window = children[i];
         if (predicate(window)) {
             children[nwindows++] = window;
@@ -655,7 +654,7 @@ Window map_window(XMapRequestEvent *request)
     XMapWindow(display, window);
     if (is_managed_window(window)) {
         // TODO ResizeRedirectMask
-        XSelectInput(display, window, PropertyChangeMask);
+        XSelectInput(display, window, PropertyChangeMask|FocusChangeMask);
         if (is_window_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
             fullscreen_window(window);
         } else {
@@ -693,7 +692,16 @@ void handle_event(XEvent *event) {
             configure_window(&event->xconfigurerequest);
             break;
         case FocusIn:
-            activate_window(None);
+            if (event->xfocus.mode == NotifyNormal) {
+                window = event->xfocus.window;
+                if (window == root) {
+                    activate_window(None);
+                } else if (is_managed_window(window) &&
+                           (event->xfocus.detail == NotifyNonlinear ||
+                            event->xfocus.detail == NotifyNonlinearVirtual)) {
+                    activate_window(window);
+                }
+            }
             break;
         case ConfigureNotify:
             if (event->xconfigure.window == root &&
@@ -829,6 +837,16 @@ int main(int argc, char *argv[]) {
 
     XChangeProperty(display, root, net_atoms[_NET_SUPPORTED], XA_ATOM, 32,
                     PropModeReplace, (unsigned char *) net_atoms, net_atoms_count);
+
+    Window *windows = NULL;
+    unsigned int nwindows;
+    nwindows = get_managed_windows(&windows);
+    for (unsigned int i = 0; i < nwindows; i++) {
+        XSelectInput(display, windows[i], PropertyChangeMask|FocusChangeMask);
+    }
+    if (windows) {
+        XFree(windows);
+    }
 
     x_fd = XConnectionNumber(display);
 
