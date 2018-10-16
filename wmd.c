@@ -50,10 +50,15 @@ enum {
     net_atoms_count
 };
 
-enum {
-    _MOTIF_WM_HINTS,
-    motif_atoms_count
-};
+#define MWM_HINTS_DECORATIONS (1L << 1)
+
+typedef struct {
+    unsigned long flags;
+    unsigned long functions;
+    unsigned long decorations;
+    long input_mode;
+    unsigned long status;
+} MotifWmHints;
 
 enum {
     _NET_WM_STATE_REMOVE,
@@ -72,9 +77,8 @@ static int screen_width;
 static int screen_height;
 static Atom wm_atoms[wm_atoms_count];
 static Atom net_atoms[net_atoms_count];
-static Atom motif_atoms[motif_atoms_count];
+static Atom _MOTIF_WM_HINTS;
 
-/* */
 static FILE *fifo;
 
 /* settings */
@@ -118,6 +122,36 @@ Atom get_atom_property(Window window, Atom property) {
     }
 
     return atom;
+}
+
+int get_border_size(Window window) {
+    Atom actual_type;
+    int actual_format;
+    unsigned long nitems;
+    unsigned long bytes_after;
+    unsigned char *prop = NULL;
+    MotifWmHints *hints;
+
+    int size = border_size;
+
+    XGetWindowProperty(display, window, _MOTIF_WM_HINTS, 0L, 5, false, _MOTIF_WM_HINTS,
+                       &actual_type, &actual_format, &nitems, &bytes_after, &prop);
+
+    if (prop &&
+        actual_type == _MOTIF_WM_HINTS &&
+        actual_format == 32 &&
+        nitems == 5) {
+        hints = (MotifWmHints *) prop;
+        if (hints->flags & MWM_HINTS_DECORATIONS && hints->decorations == 0) {
+            size = 0;
+        }
+    }
+
+    if (prop) {
+        XFree(prop);
+    }
+
+    return size;
 }
 
 Window get_active_window() {
@@ -435,6 +469,7 @@ void tile_window(Window window,
     int window_height;
     int window_x;
     int window_y;
+    int border_size = get_border_size(window);
     hints.flags = 0;
 
     // If there is a specified size and position, use it and do not do any tiling
@@ -833,7 +868,7 @@ int main(int argc, char *argv[]) {
     net_atoms[_NET_WM_WINDOW_TYPE_DIALOG] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DIALOG", false);
     net_atoms[_NET_WM_WINDOW_TYPE_DOCK] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK", false);
     net_atoms[_NET_WM_WINDOW_TYPE_SPLASH] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_SPLASH", false);
-    motif_atoms[_MOTIF_WM_HINTS] = XInternAtom(display, "_MOTIF_WM_HINTS", false);
+    _MOTIF_WM_HINTS = XInternAtom(display, "_MOTIF_WM_HINTS", false);
 
     XChangeProperty(display, root, net_atoms[_NET_SUPPORTED], XA_ATOM, 32,
                     PropModeReplace, (unsigned char *) net_atoms, net_atoms_count);
