@@ -18,11 +18,12 @@
 /* https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html */
 
 #define FLAG_ROOT       "r"
+#define FLAG_ACTIVE     "a"
+#define FLAG_POINTER    "p"
 #define FLAG_FULLSCREEN "f"
 #define FLAG_ABOVE      "t"
-#define FLAG_POINTER    "p"
-#define FLAG_ACTIVE     "a"
 #define FLAG_URGENT     "u"
+#define FLAG_NULL       " "
 /* #define FLAG_ATTENTION */
 
 enum {
@@ -409,13 +410,22 @@ void print_window(FILE *stream, Window window, char *global_flags) {
     XTextProperty name;
     char *name_name = "";
     name.value = NULL;
-    char flags[3] = "";
+    char flags[5];
+    flags[0] = '\0';
 
+    // TODO include pid?
+
+    if (global_flags) {
+        strcat(flags, global_flags);
+    }
     if (is_window_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
         strcat(flags, FLAG_FULLSCREEN);
     }
     if (is_window_state_set(window, net_atoms[_NET_WM_STATE_ABOVE])) {
         strcat(flags, FLAG_ABOVE);
+    }
+    if (flags[0] == '\0') {
+        strcat(flags, FLAG_NULL);
     }
 
     XGetWindowAttributes(display, window, &attributes);
@@ -432,9 +442,8 @@ void print_window(FILE *stream, Window window, char *global_flags) {
         name_name = (char *)name.value;
     }
     fprintf(stream,
-            "0x%08lx\t%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
+            "0x%08lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
             window,
-            global_flags,
             flags,
             attributes.width,
             attributes.height,
