@@ -17,6 +17,8 @@
 /* https://tronche.com/gui/x/xlib/ */
 /* https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html */
 
+#define MIN(a,b)        ((a) < (b) ? (a) : (b))
+
 #define FLAG_ROOT       "r"
 #define FLAG_ACTIVE     "a"
 #define FLAG_POINTER    "p"
@@ -479,15 +481,10 @@ void tile_window(Window window,
     int window_x;
     int window_y;
     int border_size = get_border_size(window);
+    Atom window_type;
     hints.flags = 0;
 
-    // If there is a specified size and position, use it and do not do any tiling
-    // If there is a specified position, ignore it
-    // If there is a specified size, tile but keep size (or limit to specified size?)
-    // obey aspect ratio
-    // obey max size
-    // obey increments
-    // TODO center certain windows
+    // TODO obey aspect ratio
     if (XGetWMNormalHints(display, window, &hints, &supplied)) {
         /* program specified size */
         /* if (hints.flags & PSize) { */
@@ -500,6 +497,8 @@ void tile_window(Window window,
     }
 
     /* XGetWindowProperty */
+
+    // obey program-specified position & size
     if (hints.flags & PSize && hints.flags & PPosition) {
         window_width = hints.width;
         window_height = hints.height;
@@ -515,11 +514,40 @@ void tile_window(Window window,
 
         window_x = gap_size + tile_width * x;
         window_y = top_padding + gap_size + tile_height * y;
-    }
-    // TODO or dont factor in border size for program psotion + size???
 
+        window_type = get_atom_property(window, net_atoms[_NET_WM_WINDOW_TYPE]);
+
+        if (window_type == net_atoms[_NET_WM_WINDOW_TYPE_DIALOG] ||
+            (hints.flags & PMaxSize && (hints.max_width < tile_width ||
+                                        hints.min_height < tile_height))) {
+            if (hints.flags & PSize) {
+            } else if (hints.flags & PBaseSize) {
+                window_width = MIN(hints.base_width, window_width);
+                window_height = MIN(hints.base_height, window_height);
+            } else if (hints.flags & PMinSize) {
+                window_width = MIN(hints.min_width, window_width);
+                window_height = MIN(hints.min_height, window_height);
+            } else if (hints.flags & PMaxSize) {
+                window_width = MIN(hints.max_width, window_width);
+                window_height = MIN(hints.max_height, window_height);
+            }
+            window_x += (tile_width - window_width) / 2;
+            window_y += (tile_height - window_height) / 2;
+        }
+    }
+
+    // TODO or dont factor in border size for program postion + size???
     window_width -= border_size * 2;
     window_height -= border_size * 2;
+
+    if (hints.flags & PResizeInc) {
+        if (hints.width_inc) {
+            window_width -= window_width % hints.width_inc;
+        }
+        if (hints.height_inc) {
+            window_height -= window_height % hints.height_inc;
+        }
+    }
 
     window_x += border_size;
     window_y += border_size;
