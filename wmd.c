@@ -328,31 +328,38 @@ bool is_dock_window(Window window) {
     return get_atom_property(window, net_atoms[_NET_WM_WINDOW_TYPE]) == net_atoms[_NET_WM_WINDOW_TYPE_DOCK];
 }
 
-bool is_managed_window(Window window) {
+bool is_manageable_window(Window window) {
     XWindowAttributes attributes;
     XWMHints *hints;
 
     hints = NULL;
 
-    bool managed = true;
+    bool manageable = false;
 
     /* TODO ignore if no hints */
 
-    if (window == None ||
-        window == root ||
-        !XGetWindowAttributes(display, window, &attributes) ||
-        attributes.override_redirect ||
-        attributes.map_state != IsViewable ||
+    if (window != None &&
+        window != root &&
+        XGetWindowAttributes(display, window, &attributes) &&
+        !attributes.override_redirect &&
         /* ((hints = XGetWMHints(display, window)) && !hints->input) || */
-        is_dock_window(window)) {
-        managed = false;
+        !is_dock_window(window)) {
+        manageable = true;
     }
 
     if (hints) {
         XFree(hints);
     }
 
-    return managed;
+    return manageable;
+}
+
+bool is_managed_window(Window window) {
+    XWindowAttributes attributes;
+
+    return (is_manageable_window(window) &&
+            XGetWindowAttributes(display, window, &attributes) &&
+            attributes.map_state == IsViewable);
 }
 
 bool is_above_window(Window window) {
@@ -722,11 +729,9 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
     fclose(response);
 }
 
-Window map_window(XMapRequestEvent *request)
-{
+void map_window(XMapRequestEvent *request) {
     Window window = request->window;
-    XMapWindow(display, window);
-    if (is_managed_window(window)) {
+    if (is_manageable_window(window)) {
         // TODO ResizeRedirectMask
         XSelectInput(display, window, PropertyChangeMask|FocusChangeMask);
         if (is_window_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
@@ -735,16 +740,14 @@ Window map_window(XMapRequestEvent *request)
             // TODO if specified size & position
             tile_window(window, 1, 1, 1, 1, 0, 0);
         }
+        XMapWindow(display, window);
         activate_window(window);
     } else {
-        window = None;
+        XMapWindow(display, window);
     }
-
-    return window;
 }
 
-void configure_window(XConfigureRequestEvent *request)
-{
+void configure_window(XConfigureRequestEvent *request) {
     Window window = request->window;
     XWindowChanges changes;
     unsigned value_mask = request->value_mask;
