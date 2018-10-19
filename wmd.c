@@ -715,6 +715,7 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
             }
         }
     }
+    free(args);
     XFlush(display);
     fflush(fifo);
     fflush(response);
