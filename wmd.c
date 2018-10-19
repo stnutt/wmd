@@ -759,11 +759,13 @@ void configure_window(XConfigureRequestEvent *request) {
     if (value_mask & CWStackMode &&
         request->detail == Above &&
         request->above == None) {
+        request->detail = Below;
         Window *windows = NULL;
         unsigned int nwindows;
         nwindows = get_windows(&is_not_above_window, &windows);
         for (unsigned int i = 0; i < nwindows; i++) {
             if (windows[i] != window) {
+                request->detail = Above;
                 changes.sibling = windows[i];
                 value_mask |= CWSibling;
                 break;
