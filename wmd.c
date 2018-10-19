@@ -479,73 +479,62 @@ void tile_window(Window window,
                  int height,
                  int x,
                  int y) {
-    XSizeHints hints;
-    long supplied;
     int tile_width;
     int tile_height;
-    int window_width;
-    int window_height;
+    XSizeHints hints;
+    long supplied;
+    XWindowAttributes attributes;
+    Atom type;
+    int border_size;
     int window_x;
     int window_y;
-    int border_size = get_border_size(window);
-    Atom window_type;
+    int window_width;
+    int window_height;
+
+    tile_width = (screen_width - gap_size) / grid_width;
+    tile_height = (screen_height - top_padding - gap_size) / grid_height;
+
+    XGetWindowAttributes(display, window, &attributes);
+
     hints.flags = 0;
+    XGetWMNormalHints(display, window, &hints, &supplied);
 
-    // TODO obey aspect ratio
-    if (XGetWMNormalHints(display, window, &hints, &supplied)) {
-        /* program specified size */
-        /* if (hints.flags & PSize) { */
-        /*     return; */
-        /* } */
-        if (hints.flags & PMaxSize) {
-        }
-        if (hints.flags & PResizeInc) {
-        }
-    }
+    type = get_atom_property(window, net_atoms[_NET_WM_WINDOW_TYPE]);
 
-    /* XGetWindowProperty */
+    border_size = get_border_size(window);
 
-    // obey program-specified position & size
-    if (hints.flags & PSize && hints.flags & PPosition) {
-        window_width = hints.width;
-        window_height = hints.height;
+    window_x = gap_size + tile_width * x;
+    window_y = top_padding + gap_size + tile_height * y;
+    window_width = tile_width * width - gap_size - border_size * 2;
+    window_height = tile_height * height - gap_size - border_size * 2;
+
+    if (hints.flags & PPosition && hints.flags & PSize) {
         window_x = hints.x;
         window_y = hints.y;
-    } else {
-
-        tile_width = (screen_width - gap_size) / grid_width;
-        tile_height = (screen_height - top_padding - gap_size) / grid_height;
-
-        window_width = tile_width * width - gap_size;
-        window_height = tile_height * height - gap_size;
-
-        window_x = gap_size + tile_width * x;
-        window_y = top_padding + gap_size + tile_height * y;
-
-        window_type = get_atom_property(window, net_atoms[_NET_WM_WINDOW_TYPE]);
-
-        if (window_type == net_atoms[_NET_WM_WINDOW_TYPE_DIALOG] ||
-            (hints.flags & PMaxSize && (hints.max_width < tile_width ||
-                                        hints.min_height < tile_height))) {
-            if (hints.flags & PSize) {
-            } else if (hints.flags & PBaseSize) {
-                window_width = MIN(hints.base_width, window_width);
-                window_height = MIN(hints.base_height, window_height);
-            } else if (hints.flags & PMinSize) {
-                window_width = MIN(hints.min_width, window_width);
-                window_height = MIN(hints.min_height, window_height);
-            } else if (hints.flags & PMaxSize) {
-                window_width = MIN(hints.max_width, window_width);
-                window_height = MIN(hints.max_height, window_height);
-            }
-            window_x += (tile_width - window_width) / 2;
-            window_y += (tile_height - window_height) / 2;
+        window_width = hints.width;
+        window_height = hints.height;
+    } else if (type == net_atoms[_NET_WM_WINDOW_TYPE_DIALOG] ||
+               type == net_atoms[_NET_WM_WINDOW_TYPE_SPLASH]) {
+        if (attributes.width < window_width) {
+            window_x += (window_width - attributes.width) / 2;
+            window_width = attributes.width;
+        }
+        if (attributes.height < window_height) {
+            window_y += (window_height - attributes.height) / 2;
+            window_height = attributes.height;
+        }
+    } else if (hints.flags & PMaxSize &&
+               (hints.max_width < window_width ||
+                hints.max_height < window_height)) {
+        if (hints.max_width < window_width) {
+            window_x += (window_width - hints.max_width) / 2;
+            window_width = hints.max_width;
+        }
+        if (hints.max_height < window_height) {
+            window_y += (window_height - hints.max_height) / 2;
+            window_height = hints.max_height;
         }
     }
-
-    // TODO or dont factor in border size for program postion + size???
-    window_width -= border_size * 2;
-    window_height -= border_size * 2;
 
     if (hints.flags & PResizeInc) {
         if (hints.width_inc) {
@@ -554,10 +543,8 @@ void tile_window(Window window,
         if (hints.height_inc) {
             window_height -= window_height % hints.height_inc;
         }
+    } else if (hints.flags & PAspect) {
     }
-
-    window_x += border_size;
-    window_y += border_size;
 
     set_window_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], false);
     XSetWindowBorderWidth(display, window, border_size);
