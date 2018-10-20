@@ -17,8 +17,6 @@
 /* https://tronche.com/gui/x/xlib/ */
 /* https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html */
 
-#define MIN(a,b)        ((a) < (b) ? (a) : (b))
-
 #define FLAG_ROOT       "r"
 #define FLAG_ACTIVE     "a"
 #define FLAG_POINTER    "p"
@@ -407,6 +405,30 @@ unsigned int get_windows(bool (*predicate)(Window), Window **windows) {
     return nwindows;
 }
 
+Window get_first_window(bool (*predicate)(Window)) {
+    Window parent;
+    Window *children = NULL;
+    unsigned int nchildren;
+    Window window = None;
+
+    XQueryTree(display, root, &root, &parent, &children, &nchildren);
+
+    while(nchildren) {
+        window = children[--nchildren];
+        if (predicate(window)) {
+            break;
+        } else {
+            window = None;
+        }
+    }
+
+    if (children) {
+        XFree(children);
+    }
+
+    return window;
+}
+
 unsigned int get_managed_windows(Window **windows) {
     return get_windows(&is_managed_window, windows);
 }
@@ -451,7 +473,7 @@ void print_window(FILE *stream, Window window, char *global_flags) {
         name_name = (char *)name.value;
     }
     fprintf(stream,
-            "0x%08lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
+            "0x%lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
             window,
             flags,
             attributes.width,
@@ -579,16 +601,14 @@ void raise_window(Window window) {
 
 void activate_window(Window window) {
     Window active;
-    Window *windows;
 
     active = get_active_window();
 
     if (window == None) {
         if (active && is_managed_window(active)) {
             window = active;
-        } else if (get_windows(&is_not_above_window, &windows)) {
-            window = windows[0];
-            XFree(windows);
+        } else {
+            window = get_first_window(&is_not_above_window);
         }
     }
     if (is_managed_window(window)) {
@@ -606,7 +626,7 @@ void activate_window(Window window) {
         }
     } else if (active) {
         set_window_property(root, net_atoms[_NET_ACTIVE_WINDOW], None);
-        fprintf(fifo, "W0x%08lx\n", None);
+        fprintf(fifo, "W0x%lx\n", None);
     }
     fflush(fifo);
 }
@@ -720,7 +740,7 @@ void map_window(XMapRequestEvent *request) {
     Window window = request->window;
     if (is_manageable_window(window)) {
         // TODO ResizeRedirectMask
-        XSelectInput(display, window, PropertyChangeMask|FocusChangeMask);
+        XSelectInput(display, window, PropertyChangeMask|FocusChangeMask|StructureNotifyMask);
         if (is_window_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
             fullscreen_window(window);
         } else {
@@ -797,6 +817,11 @@ void handle_event(XEvent *event) {
                 screen_height = event->xconfigure.height;
                 fputc('W', fifo);
                 print_window(fifo, root, FLAG_ROOT);
+            }
+            break;
+        case DestroyNotify:
+            if (event->xdestroywindow.window == get_active_window()) {
+                activate_window(None);
             }
             break;
         case PropertyNotify:
