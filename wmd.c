@@ -757,10 +757,19 @@ void configure_window(XConfigureRequestEvent *request) {
     Window window = request->window;
     XWindowChanges changes;
     unsigned value_mask = request->value_mask;
-    changes.x = request->x;
-    changes.y = request->y;
-    changes.width = request->width;
-    changes.height = request->height;
+    XSizeHints hints;
+    long supplied;
+    hints.flags = 0;
+    XGetWMNormalHints(display, window, &hints, &supplied);
+    if (!is_managed_window(window) ||
+        (hints.flags & PPosition && hints.flags & PSize)) {
+        changes.x = request->x;
+        changes.y = request->y;
+        changes.width = request->width;
+        changes.height = request->height;
+    } else {
+        value_mask &= ~(CWX|CWY|CWWidth|CWHeight);
+    }
     changes.border_width = request->border_width;
     if (value_mask & CWStackMode &&
         request->detail == Above &&
@@ -952,7 +961,7 @@ int main(int argc, char *argv[]) {
     unsigned int nwindows;
     nwindows = get_managed_windows(&windows);
     for (unsigned int i = 0; i < nwindows; i++) {
-        XSelectInput(display, windows[i], PropertyChangeMask|FocusChangeMask);
+        XSelectInput(display, windows[i], PropertyChangeMask|FocusChangeMask|StructureNotifyMask);
     }
     if (windows) {
         XFree(windows);
