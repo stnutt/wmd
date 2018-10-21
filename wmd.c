@@ -729,7 +729,7 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
         }
     }
     free(args);
-    XFlush(display);
+    XSync(display, False);
     fflush(fifo);
     fflush(response);
     fclose(response);
@@ -877,7 +877,7 @@ void handle_event(XEvent *event) {
             }
             break;
     }
-    XFlush(display);
+    XSync(display, False);
     fflush(fifo);
 }
 
