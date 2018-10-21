@@ -1,6 +1,5 @@
 #include <fcntl.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,8 +66,8 @@ enum {
     _NET_WM_STATE_TOGGLE
 };
 
-static bool quit = false;
-static bool restart = false;
+static Bool quit = False;
+static Bool restart = False;
 
 /* X */
 static Display *display;
@@ -106,7 +105,7 @@ unsigned char *get_property(Window window, Atom property, long length, Atom type
     unsigned char *prop;
 
     prop = NULL;
-    XGetWindowProperty(display, window, property, 0L, length, false, type,
+    XGetWindowProperty(display, window, property, 0L, length, False, type,
                        &actual_type, &actual_format, &nitems, &bytes_after, &prop);
     return prop;
 }
@@ -135,7 +134,7 @@ int get_border_size(Window window) {
 
     int size = border_size;
 
-    XGetWindowProperty(display, window, _MOTIF_WM_HINTS, 0L, 5, false, _MOTIF_WM_HINTS,
+    XGetWindowProperty(display, window, _MOTIF_WM_HINTS, 0L, 5, False, _MOTIF_WM_HINTS,
                        &actual_type, &actual_format, &nitems, &bytes_after, &prop);
 
     if (prop &&
@@ -181,7 +180,7 @@ Window get_pointer_window() {
     return child;
 }
 
-void set_window_state(Window window, Atom state, bool set) {
+void set_window_state(Window window, Atom state, Bool set) {
     Atom actual_type;
     int actual_format;
     unsigned long nitems;
@@ -227,22 +226,22 @@ void set_window_state(Window window, Atom state, bool set) {
     }
 }
 
-bool is_window_state_set(Window window, Atom state) {
+Bool is_window_state_set(Window window, Atom state) {
     Atom actual_type;
     int actual_format;
     unsigned long nitems;
     unsigned long bytes_after;
     Atom *states;
-    bool set = false;
+    Bool set = False;
 
     states = NULL;
     if (XGetWindowProperty(
-            display, window, net_atoms[_NET_WM_STATE], 0L, ~0L, false, XA_ATOM,
+            display, window, net_atoms[_NET_WM_STATE], 0L, ~0L, False, XA_ATOM,
             &actual_type, &actual_format, &nitems, &bytes_after, (unsigned char **) &states) == Success &&
         actual_type == XA_ATOM && actual_format == 32 && states) {
         while (nitems) {
             if (states[--nitems] == state) {
-                set = true;
+                set = True;
                 break;
             }
         }
@@ -322,17 +321,17 @@ void read_resources()
     }
 }
 
-bool is_dock_window(Window window) {
+Bool is_dock_window(Window window) {
     return get_atom_property(window, net_atoms[_NET_WM_WINDOW_TYPE]) == net_atoms[_NET_WM_WINDOW_TYPE_DOCK];
 }
 
-bool is_manageable_window(Window window) {
+Bool is_manageable_window(Window window) {
     XWindowAttributes attributes;
     XWMHints *hints;
 
     hints = NULL;
 
-    bool manageable = false;
+    Bool manageable = False;
 
     /* TODO ignore if no hints */
 
@@ -342,7 +341,7 @@ bool is_manageable_window(Window window) {
         !attributes.override_redirect &&
         /* ((hints = XGetWMHints(display, window)) && !hints->input) || */
         !is_dock_window(window)) {
-        manageable = true;
+        manageable = True;
     }
 
     if (hints) {
@@ -352,7 +351,7 @@ bool is_manageable_window(Window window) {
     return manageable;
 }
 
-bool is_managed_window(Window window) {
+Bool is_managed_window(Window window) {
     XWindowAttributes attributes;
 
     return (is_manageable_window(window) &&
@@ -360,15 +359,15 @@ bool is_managed_window(Window window) {
             attributes.map_state == IsViewable);
 }
 
-bool is_above_window(Window window) {
+Bool is_above_window(Window window) {
     return is_managed_window(window) && is_window_state_set(window, net_atoms[_NET_WM_STATE_ABOVE]);
 }
 
-bool is_not_above_window(Window window) {
+Bool is_not_above_window(Window window) {
     return is_managed_window(window) && !is_window_state_set(window, net_atoms[_NET_WM_STATE_ABOVE]);
 }
 
-unsigned int get_windows(bool (*predicate)(Window), Window **windows) {
+unsigned int get_windows(Bool (*predicate)(Window), Window **windows) {
     Window parent;
     Window *children;
     unsigned int nchildren;
@@ -405,7 +404,7 @@ unsigned int get_windows(bool (*predicate)(Window), Window **windows) {
     return nwindows;
 }
 
-Window get_first_window(bool (*predicate)(Window)) {
+Window get_first_window(Bool (*predicate)(Window)) {
     Window parent;
     Window *children = NULL;
     unsigned int nchildren;
@@ -568,13 +567,13 @@ void tile_window(Window window,
     } else if (hints.flags & PAspect) {
     }
 
-    set_window_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], false);
+    set_window_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], False);
     XSetWindowBorderWidth(display, window, border_size);
     XMoveResizeWindow(display, window, window_x, window_y, window_width, window_height);
 }
 
 void fullscreen_window(Window window) {
-    set_window_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], true);
+    set_window_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], True);
     XMoveResizeWindow(display, window, 0, 0, screen_width, screen_height);
     XSetWindowBorderWidth(display, window, 0);
     XRaiseWindow(display, window);
@@ -662,10 +661,10 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
     if (args_len == 0) {
         fprintf(response, "%c", '1');
     } else if (!strcmp(args[0], "quit")) {
-        quit = true;
+        quit = True;
         fprintf(response, "%c", '0');
     } else if (!strcmp(args[0], "restart")) {
-        restart = true;
+        restart = True;
         fprintf(response, "%c", '0');
     } else if (!strcmp(args[0], "root")) {
         fprintf(response, "%c", '0');
@@ -845,10 +844,10 @@ void handle_event(XEvent *event) {
                     event->xclient.data.l[2] == net_atoms[_NET_WM_STATE_ABOVE]) {
                     switch (event->xclient.data.l[0]) {
                         case _NET_WM_STATE_REMOVE:
-                            set_window_state(window, net_atoms[_NET_WM_STATE_ABOVE], false);
+                            set_window_state(window, net_atoms[_NET_WM_STATE_ABOVE], False);
                             break;
                         case _NET_WM_STATE_ADD:
-                            set_window_state(window, net_atoms[_NET_WM_STATE_ABOVE], true);
+                            set_window_state(window, net_atoms[_NET_WM_STATE_ABOVE], True);
                             XRaiseWindow(display, window);
                             break;
                         case _NET_WM_STATE_TOGGLE:
@@ -884,7 +883,7 @@ void handle_event(XEvent *event) {
 
 void handle_signal(int signal) {
     if (signal == SIGINT || signal == SIGTERM) {
-        quit = true;
+        quit = True;
     }
 }
 
@@ -929,22 +928,22 @@ int main(int argc, char *argv[]) {
     read_resources();
     XSelectInput(display, root, StructureNotifyMask|SubstructureRedirectMask|FocusChangeMask);
 
-    wm_atoms[WM_PROTOCOLS] = XInternAtom(display, "WM_PROTOCOLS", false);
-    wm_atoms[WM_TAKE_FOCUS] = XInternAtom(display, "WM_TAKE_FOCUS", false);
-    wm_atoms[WM_DELETE_WINDOW] = XInternAtom(display, "WM_DELETE_WINDOW", false);
+    wm_atoms[WM_PROTOCOLS] = XInternAtom(display, "WM_PROTOCOLS", False);
+    wm_atoms[WM_TAKE_FOCUS] = XInternAtom(display, "WM_TAKE_FOCUS", False);
+    wm_atoms[WM_DELETE_WINDOW] = XInternAtom(display, "WM_DELETE_WINDOW", False);
 
-    net_atoms[_NET_SUPPORTED] = XInternAtom(display, "_NET_SUPPORTED", false);
-    net_atoms[_NET_SUPPORTING_WM_CHECK] = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", false);
-    net_atoms[_NET_ACTIVE_WINDOW] = XInternAtom(display, "_NET_ACTIVE_WINDOW", false);
-    net_atoms[_NET_WM_NAME] = XInternAtom(display, "_NET_WM_NAME", false);
-    net_atoms[_NET_WM_STATE] = XInternAtom(display, "_NET_WM_STATE", false);
-    net_atoms[_NET_WM_STATE_ABOVE] = XInternAtom(display, "_NET_WM_STATE_ABOVE", false);
-    net_atoms[_NET_WM_STATE_FULLSCREEN] = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", false);
-    net_atoms[_NET_WM_WINDOW_TYPE] = XInternAtom(display, "_NET_WM_WINDOW_TYPE", false);
-    net_atoms[_NET_WM_WINDOW_TYPE_DIALOG] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DIALOG", false);
-    net_atoms[_NET_WM_WINDOW_TYPE_DOCK] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK", false);
-    net_atoms[_NET_WM_WINDOW_TYPE_SPLASH] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_SPLASH", false);
-    _MOTIF_WM_HINTS = XInternAtom(display, "_MOTIF_WM_HINTS", false);
+    net_atoms[_NET_SUPPORTED] = XInternAtom(display, "_NET_SUPPORTED", False);
+    net_atoms[_NET_SUPPORTING_WM_CHECK] = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", False);
+    net_atoms[_NET_ACTIVE_WINDOW] = XInternAtom(display, "_NET_ACTIVE_WINDOW", False);
+    net_atoms[_NET_WM_NAME] = XInternAtom(display, "_NET_WM_NAME", False);
+    net_atoms[_NET_WM_STATE] = XInternAtom(display, "_NET_WM_STATE", False);
+    net_atoms[_NET_WM_STATE_ABOVE] = XInternAtom(display, "_NET_WM_STATE_ABOVE", False);
+    net_atoms[_NET_WM_STATE_FULLSCREEN] = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False);
+    net_atoms[_NET_WM_WINDOW_TYPE] = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
+    net_atoms[_NET_WM_WINDOW_TYPE_DIALOG] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DIALOG", False);
+    net_atoms[_NET_WM_WINDOW_TYPE_DOCK] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_DOCK", False);
+    net_atoms[_NET_WM_WINDOW_TYPE_SPLASH] = XInternAtom(display, "_NET_WM_WINDOW_TYPE_SPLASH", False);
+    _MOTIF_WM_HINTS = XInternAtom(display, "_MOTIF_WM_HINTS", False);
 
     XChangeProperty(display, root, net_atoms[_NET_SUPPORTED], XA_ATOM, 32,
                     PropModeReplace, (unsigned char *) net_atoms, net_atoms_count);
@@ -1008,7 +1007,7 @@ int main(int argc, char *argv[]) {
     set_window_property(wm_window, net_atoms[_NET_SUPPORTING_WM_CHECK], wm_window);
     set_window_property(root, net_atoms[_NET_SUPPORTING_WM_CHECK], wm_window);
     XChangeProperty(display, wm_window, net_atoms[_NET_WM_NAME],
-                    XInternAtom(display, "UTF8_STRING", false), 8,
+                    XInternAtom(display, "UTF8_STRING", False), 8,
                     PropModeReplace, (unsigned char *) "wmd", 3);
 
     fputc('W', fifo);
