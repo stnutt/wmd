@@ -759,10 +759,14 @@ void configure_window(XConfigureRequestEvent *request) {
     unsigned value_mask = request->value_mask;
     XSizeHints hints;
     long supplied;
+    Atom type;
+
     hints.flags = 0;
     XGetWMNormalHints(display, window, &hints, &supplied);
+    type = get_atom_property(window, net_atoms[_NET_WM_WINDOW_TYPE]);
     if (!is_managed_window(window) ||
-        (hints.flags & PPosition && hints.flags & PSize)) {
+        (hints.flags & PPosition && hints.flags & PSize) ||
+        type == net_atoms[_NET_WM_WINDOW_TYPE_DIALOG]) {
         changes.x = request->x;
         changes.y = request->y;
         changes.width = request->width;
