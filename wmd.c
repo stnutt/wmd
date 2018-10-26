@@ -13,7 +13,11 @@
 #include <X11/Xresource.h>
 #include <X11/Xutil.h>
 
+// TODO
+// WM_TRANSIENT_FOR https://tronche.com/gui/x/icccm/sec-4.html#WM_TRANSIENT_FOR
+
 /* https://tronche.com/gui/x/xlib/ */
+/* https://tronche.com/gui/x/icccm/ */
 /* https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html */
 
 #define FLAG_ROOT       "r"
@@ -22,11 +26,15 @@
 #define FLAG_FULLSCREEN "f"
 #define FLAG_ABOVE      "t"
 #define FLAG_URGENT     "u"
+#define FLAG_ICONIC     "i"
 #define FLAG_NULL       " "
+#define FLAG_COUNT      7
 /* #define FLAG_ATTENTION */
 
 enum {
     WM_PROTOCOLS,
+    WM_STATE,
+    WM_CHANGE_STATE,
     WM_DELETE_WINDOW,
     WM_TAKE_FOCUS,
     wm_atoms_count
@@ -87,6 +95,11 @@ static unsigned int background;
 static int border_size;
 static int gap_size;
 static int top_padding;
+
+static void iconify_window(Window window, Bool iconify);
+static void activate_window(Window window);
+static void raise_window(Window window);
+static void fullscreen_window(Window window);
 
 static int error_handler(Display *display, XErrorEvent *error) {
     return 0;
@@ -180,7 +193,26 @@ Window get_pointer_window() {
     return child;
 }
 
-void set_window_state(Window window, Atom state, Bool set) {
+void set_wm_state(Window window, long state) {
+    long data[] = { state, None };
+
+    XChangeProperty(display, window, wm_atoms[WM_STATE], wm_atoms[WM_STATE], 32,
+                    PropModeReplace, (unsigned char *) data, 2);
+}
+
+long get_wm_state(Window window) {
+    unsigned char *prop = NULL;
+    long state = -1;
+
+    prop = get_property(window, wm_atoms[WM_STATE], 2L, wm_atoms[WM_STATE]);
+    if (prop) {
+        state = *prop;
+        XFree(prop);
+    }
+    return state;
+}
+
+void set_net_wm_state(Window window, Atom state, Bool set) {
     Atom actual_type;
     int actual_format;
     unsigned long nitems;
@@ -226,7 +258,7 @@ void set_window_state(Window window, Atom state, Bool set) {
     }
 }
 
-Bool is_window_state_set(Window window, Atom state) {
+Bool is_net_wm_state_set(Window window, Atom state) {
     Atom actual_type;
     int actual_format;
     unsigned long nitems;
@@ -356,15 +388,20 @@ Bool is_managed_window(Window window) {
 
     return (is_manageable_window(window) &&
             XGetWindowAttributes(display, window, &attributes) &&
-            attributes.map_state == IsViewable);
+            (attributes.map_state == IsViewable ||
+             get_wm_state(window) == IconicState));
 }
 
 Bool is_above_window(Window window) {
-    return is_managed_window(window) && is_window_state_set(window, net_atoms[_NET_WM_STATE_ABOVE]);
+    return is_managed_window(window) && is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_ABOVE]);
 }
 
 Bool is_not_above_window(Window window) {
-    return is_managed_window(window) && !is_window_state_set(window, net_atoms[_NET_WM_STATE_ABOVE]);
+    return is_managed_window(window) && !is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_ABOVE]);
+}
+
+Bool is_normal_window(Window window) {
+    return is_not_above_window(window) && get_wm_state(window) == NormalState;
 }
 
 unsigned int get_windows(Bool (*predicate)(Window), Window **windows) {
@@ -440,7 +477,7 @@ void print_window(FILE *stream, Window window, char *global_flags) {
     XTextProperty name;
     char *name_name = "";
     name.value = NULL;
-    char flags[5];
+    char flags[FLAG_COUNT];
     flags[0] = '\0';
 
     // TODO include pid?
@@ -448,11 +485,14 @@ void print_window(FILE *stream, Window window, char *global_flags) {
     if (global_flags) {
         strcat(flags, global_flags);
     }
-    if (is_window_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
+    if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
         strcat(flags, FLAG_FULLSCREEN);
     }
-    if (is_window_state_set(window, net_atoms[_NET_WM_STATE_ABOVE])) {
+    if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_ABOVE])) {
         strcat(flags, FLAG_ABOVE);
+    }
+    if (get_wm_state(window) == IconicState) {
+        strcat(flags, FLAG_ICONIC);
     }
     if (flags[0] == '\0') {
         strcat(flags, FLAG_NULL);
@@ -472,7 +512,7 @@ void print_window(FILE *stream, Window window, char *global_flags) {
         name_name = (char *)name.value;
     }
     fprintf(stream,
-            "0x%lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
+            "0x%07lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
             window,
             flags,
             attributes.width,
@@ -567,13 +607,13 @@ void tile_window(Window window,
     } else if (hints.flags & PAspect) {
     }
 
-    set_window_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], False);
+    set_net_wm_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], False);
     XSetWindowBorderWidth(display, window, border_size);
     XMoveResizeWindow(display, window, window_x, window_y, window_width, window_height);
 }
 
 void fullscreen_window(Window window) {
-    set_window_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], True);
+    set_net_wm_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], True);
     XMoveResizeWindow(display, window, 0, 0, screen_width, screen_height);
     XSetWindowBorderWidth(display, window, 0);
     XRaiseWindow(display, window);
@@ -604,13 +644,16 @@ void activate_window(Window window) {
     active = get_active_window();
 
     if (window == None) {
-        if (active && is_managed_window(active)) {
+        if (active && is_normal_window(active)) {
             window = active;
         } else {
-            window = get_first_window(&is_not_above_window);
+            window = get_first_window(&is_normal_window);
         }
     }
     if (is_managed_window(window)) {
+        if (get_wm_state(window) == IconicState) {
+            iconify_window(window, False);
+        }
         if (active && window != active) {
             XSetWindowBorder(display, active, background);
         }
@@ -625,9 +668,25 @@ void activate_window(Window window) {
         }
     } else if (active) {
         set_window_property(root, net_atoms[_NET_ACTIVE_WINDOW], None);
-        fprintf(fifo, "W0x%lx\n", None);
+        fprintf(fifo, "W0x%07lx\n", None);
     }
     fflush(fifo);
+}
+
+void iconify_window(Window window, Bool iconify) {
+    if (iconify) {
+        set_wm_state(window, IconicState);
+        XUnmapWindow(display, window);
+        Window focus;
+        int revert_to;
+        XGetInputFocus(display, &focus, &revert_to);
+        if (window == focus) {
+            XSetInputFocus(display, root, RevertToPointerRoot, CurrentTime);
+        }
+    } else {
+        XMapWindow(display, window);
+        set_wm_state(window, NormalState);
+    }
 }
 
 /* quit */
@@ -666,9 +725,6 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
     } else if (!strcmp(args[0], "restart")) {
         restart = True;
         fprintf(response, "%c", '0');
-    } else if (!strcmp(args[0], "root")) {
-        fprintf(response, "%c", '0');
-        print_window(response, root, FLAG_ROOT);
     } else if (!strcmp(args[0], "windows")) {
         Window *windows = NULL;
         unsigned int nwindows;
@@ -690,6 +746,7 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
         if (windows) {
             XFree(windows);
         }
+        print_window(response, root, FLAG_ROOT);
     } else if (args_len == 1) {
         fprintf(response, "%c", '1');
     } else {
@@ -725,6 +782,8 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
                 fullscreen_window(window);
             } else if (!strcmp(args[0], "tile")) {
                 tile_window(window, grid_w, grid_h, w, h, x, y);
+            } else if (!strcmp(args[0], "iconify")) {
+                iconify_window(window, True);
             }
         }
     }
@@ -740,14 +799,24 @@ void map_window(XMapRequestEvent *request) {
     if (is_manageable_window(window)) {
         // TODO ResizeRedirectMask
         XSelectInput(display, window, PropertyChangeMask|FocusChangeMask|StructureNotifyMask);
-        if (is_window_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
+        if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
             fullscreen_window(window);
         } else {
             // TODO if specified size & position
             tile_window(window, 1, 1, 1, 1, 0, 0);
         }
-        XMapWindow(display, window);
-        activate_window(window);
+        XWMHints *hints = NULL;
+        hints = XGetWMHints(display, window);
+        if (hints && hints->initial_state == IconicState) {
+            set_wm_state(window, IconicState);
+        } else {
+            set_wm_state(window, NormalState);
+            XMapWindow(display, window);
+            activate_window(window);
+        }
+        if (hints) {
+            XFree(hints);
+        }
     } else {
         XMapWindow(display, window);
     }
@@ -810,7 +879,8 @@ void handle_event(XEvent *event) {
             configure_window(&event->xconfigurerequest);
             break;
         case FocusIn:
-            if (event->xfocus.mode == NotifyNormal) {
+            if (event->xfocus.mode == NotifyNormal ||
+                event->xfocus.mode == NotifyWhileGrabbed) {
                 window = event->xfocus.window;
                 if (window == root) {
                     activate_window(None);
@@ -831,11 +901,6 @@ void handle_event(XEvent *event) {
                 print_window(fifo, root, FLAG_ROOT);
             }
             break;
-        case DestroyNotify:
-            if (event->xdestroywindow.window == get_active_window()) {
-                activate_window(None);
-            }
-            break;
         case PropertyNotify:
             window = event->xproperty.window;
             if ((event->xproperty.atom == XA_WM_NAME ||
@@ -852,15 +917,21 @@ void handle_event(XEvent *event) {
             window = event->xclient.window;
             if (is_managed_window(window)) {
             }
-            if (event->xclient.message_type == net_atoms[_NET_WM_STATE]) {
+            if (event->xclient.message_type == wm_atoms[WM_CHANGE_STATE]) {
+                if (event->xclient.data.l[0] == IconicState) {
+                    iconify_window(window, True);
+                } else if (event->xclient.data.l[0] == NormalState) {
+                    iconify_window(window, False);
+                }
+            } else if (event->xclient.message_type == net_atoms[_NET_WM_STATE]) {
                 if (event->xclient.data.l[1] == net_atoms[_NET_WM_STATE_ABOVE] ||
                     event->xclient.data.l[2] == net_atoms[_NET_WM_STATE_ABOVE]) {
                     switch (event->xclient.data.l[0]) {
                         case _NET_WM_STATE_REMOVE:
-                            set_window_state(window, net_atoms[_NET_WM_STATE_ABOVE], False);
+                            set_net_wm_state(window, net_atoms[_NET_WM_STATE_ABOVE], False);
                             break;
                         case _NET_WM_STATE_ADD:
-                            set_window_state(window, net_atoms[_NET_WM_STATE_ABOVE], True);
+                            set_net_wm_state(window, net_atoms[_NET_WM_STATE_ABOVE], True);
                             XRaiseWindow(display, window);
                             break;
                         case _NET_WM_STATE_TOGGLE:
@@ -877,7 +948,7 @@ void handle_event(XEvent *event) {
                             fullscreen_window(window);
                             break;
                         case _NET_WM_STATE_TOGGLE:
-                            if (is_window_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
+                            if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
                                 tile_window(window, 1, 1, 1, 1, 0, 0);
                             } else {
                                 fullscreen_window(window);
@@ -939,9 +1010,11 @@ int main(int argc, char *argv[]) {
     screen_height = XDisplayHeight(display, screen);
     root = RootWindow(display, screen);
     read_resources();
-    XSelectInput(display, root, StructureNotifyMask|SubstructureRedirectMask|FocusChangeMask);
+    XSelectInput(display, root, StructureNotifyMask|SubstructureNotifyMask|SubstructureRedirectMask|FocusChangeMask);
 
     wm_atoms[WM_PROTOCOLS] = XInternAtom(display, "WM_PROTOCOLS", False);
+    wm_atoms[WM_STATE] = XInternAtom(display, "WM_STATE", False);
+    wm_atoms[WM_CHANGE_STATE] = XInternAtom(display, "WM_CHANGE_STATE", False);
     wm_atoms[WM_TAKE_FOCUS] = XInternAtom(display, "WM_TAKE_FOCUS", False);
     wm_atoms[WM_DELETE_WINDOW] = XInternAtom(display, "WM_DELETE_WINDOW", False);
 
