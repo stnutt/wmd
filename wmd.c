@@ -838,12 +838,26 @@ void configure_window(XConfigureRequestEvent *request) {
     XGetWMNormalHints(display, window, &hints, &supplied);
     type = get_atom_property(window, net_atoms[_NET_WM_WINDOW_TYPE]);
     if (!is_managed_window(window) ||
-        (hints.flags & PPosition && hints.flags & PSize) ||
-        type == net_atoms[_NET_WM_WINDOW_TYPE_DIALOG]) {
+        (hints.flags & PPosition && hints.flags & PSize)) {
         changes.x = request->x;
         changes.y = request->y;
         changes.width = request->width;
         changes.height = request->height;
+    } else if (type == net_atoms[_NET_WM_WINDOW_TYPE_DIALOG] ||
+               type == net_atoms[_NET_WM_WINDOW_TYPE_SPLASH]) {
+        XWindowAttributes attributes;
+        XGetWindowAttributes(display, window, &attributes);
+        value_mask &= ~(CWX|CWY);
+        if (value_mask & CWWidth) {
+            changes.width = request->width;
+            changes.x = attributes.x + (attributes.width - changes.width) / 2;
+            value_mask |= CWX;
+        }
+        if (value_mask & CWHeight) {
+            changes.height = request->height;
+            changes.y = attributes.y + (attributes.height - changes.height) / 2;
+            value_mask |= CWY;
+        }
     } else {
         value_mask &= ~(CWX|CWY|CWWidth|CWHeight);
     }
