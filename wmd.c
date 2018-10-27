@@ -482,34 +482,38 @@ void print_window(FILE *stream, Window window, char *global_flags) {
 
     // TODO include pid?
 
+    XGetWindowAttributes(display, window, &attributes);
     if (global_flags) {
         strcat(flags, global_flags);
     }
-    if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
-        strcat(flags, FLAG_FULLSCREEN);
-    }
-    if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_ABOVE])) {
-        strcat(flags, FLAG_ABOVE);
-    }
-    if (get_wm_state(window) == IconicState) {
-        strcat(flags, FLAG_ICONIC);
-    }
-    if (flags[0] == '\0') {
-        strcat(flags, FLAG_NULL);
-    }
+    if (window == root) {
+        strcat(flags, FLAG_ROOT);
+    } else {
+        if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
+            strcat(flags, FLAG_FULLSCREEN);
+        }
+        if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_ABOVE])) {
+            strcat(flags, FLAG_ABOVE);
+        }
+        if (get_wm_state(window) == IconicState) {
+            strcat(flags, FLAG_ICONIC);
+        }
+        if (flags[0] == '\0') {
+            strcat(flags, FLAG_NULL);
+        }
 
-    XGetWindowAttributes(display, window, &attributes);
-    XGetClassHint(display, window, &class);
-    if (class.res_name) {
-        class_name = class.res_name;
-    }
-    if (class.res_class) {
-        class_class = class.res_class;
-    }
-    if ((XGetTextProperty(display, window, &name, net_atoms[_NET_WM_NAME]) ||
-         XGetWMName(display, window, &name)) &&
-         name.value) {
-        name_name = (char *)name.value;
+        XGetClassHint(display, window, &class);
+        if (class.res_name) {
+            class_name = class.res_name;
+        }
+        if (class.res_class) {
+            class_class = class.res_class;
+        }
+        if ((XGetTextProperty(display, window, &name, net_atoms[_NET_WM_NAME]) ||
+             XGetWMName(display, window, &name)) &&
+            name.value) {
+            name_name = (char *)name.value;
+        }
     }
     fprintf(stream,
             "0x%07lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
@@ -731,7 +735,7 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
         fprintf(response, "%c", '0');
         Window pointer = get_pointer_window();
         Window active = get_active_window();
-        char flags[3];
+        char flags[FLAG_COUNT];
         nwindows = get_managed_windows(&windows);
         for (unsigned int i = 0; i < nwindows; i++) {
             flags[0] = '\0';
@@ -746,7 +750,7 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
         if (windows) {
             XFree(windows);
         }
-        print_window(response, root, FLAG_ROOT);
+        print_window(response, root, NULL);
     } else if (args_len == 1) {
         fprintf(response, "%c", '1');
     } else {
@@ -898,7 +902,7 @@ void handle_event(XEvent *event) {
                 screen_width = event->xconfigure.width;
                 screen_height = event->xconfigure.height;
                 fputc('W', fifo);
-                print_window(fifo, root, FLAG_ROOT);
+                print_window(fifo, root, NULL);
             }
             break;
         case PropertyNotify:
@@ -1097,7 +1101,7 @@ int main(int argc, char *argv[]) {
                     PropModeReplace, (unsigned char *) "wmd", 3);
 
     fputc('W', fifo);
-    print_window(fifo, root, FLAG_ROOT);
+    print_window(fifo, root, NULL);
 
     while(!restart && !quit) {
         FD_ZERO(&fds);
