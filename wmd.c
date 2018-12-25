@@ -897,17 +897,7 @@ void handle_event(XEvent *event) {
             configure_window(&event->xconfigurerequest);
             break;
         case FocusIn:
-            if (event->xfocus.mode == NotifyNormal ||
-                event->xfocus.mode == NotifyWhileGrabbed) {
-                window = event->xfocus.window;
-                if (window == root) {
-                    activate_window(None);
-                } else if (is_managed_window(window) &&
-                           (event->xfocus.detail == NotifyNonlinear ||
-                            event->xfocus.detail == NotifyNonlinearVirtual)) {
-                    activate_window(window);
-                }
-            }
+            activate_window(None);
             break;
         case ConfigureNotify:
             if (event->xconfigure.window == root &&
@@ -973,7 +963,7 @@ void handle_event(XEvent *event) {
                     }
                 }
             } else if (event->xclient.message_type == net_atoms[_NET_ACTIVE_WINDOW]) {
-                // TODO
+                activate_window(event->xclient.window);
             }
             break;
     }
