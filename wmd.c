@@ -5,7 +5,6 @@
 #include <string.h>
 #include <sys/select.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <X11/Xatom.h>
@@ -27,7 +26,6 @@
 #define FLAG_ABOVE      "t"
 #define FLAG_URGENT     "u"
 #define FLAG_ICONIC     "i"
-#define FLAG_NULL       " "
 #define FLAG_COUNT      7
 /* #define FLAG_ATTENTION */
 
@@ -87,7 +85,8 @@ static Atom wm_atoms[wm_atoms_count];
 static Atom net_atoms[net_atoms_count];
 static Atom _MOTIF_WM_HINTS;
 
-static FILE *fifo;
+static char *prefix = "W";
+static FILE *fifo = NULL;
 
 /* settings */
 static unsigned int foreground;
@@ -469,8 +468,8 @@ unsigned int get_managed_windows(Window **windows) {
     return get_windows(&is_managed_window, windows);
 }
 
-void print_window(FILE *stream, Window window, char *global_flags) {
-    XWindowAttributes attributes;
+void print_window(FILE *stream, char *prefix, Window window, char *global_flags) {
+    XWindowAttributes attributes = { 0, 0, 0, 0 };
     XClassHint class = { NULL, NULL };
     char *class_name = "";
     char *class_class = "";
@@ -481,14 +480,14 @@ void print_window(FILE *stream, Window window, char *global_flags) {
     flags[0] = '\0';
 
     // TODO include pid?
-
-    XGetWindowAttributes(display, window, &attributes);
     if (global_flags) {
         strcat(flags, global_flags);
     }
+
     if (window == root) {
         strcat(flags, FLAG_ROOT);
-    } else {
+    } else if (window != None) {
+        XGetWindowAttributes(display, window, &attributes);
         if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
             strcat(flags, FLAG_FULLSCREEN);
         }
@@ -497,9 +496,6 @@ void print_window(FILE *stream, Window window, char *global_flags) {
         }
         if (get_wm_state(window) == IconicState) {
             strcat(flags, FLAG_ICONIC);
-        }
-        if (flags[0] == '\0') {
-            strcat(flags, FLAG_NULL);
         }
 
         XGetClassHint(display, window, &class);
@@ -515,17 +511,24 @@ void print_window(FILE *stream, Window window, char *global_flags) {
             name_name = (char *)name.value;
         }
     }
-    fprintf(stream,
-            "0x%07lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
-            window,
-            flags,
-            attributes.width,
-            attributes.height,
-            attributes.x,
-            attributes.y,
-            class_name,
-            class_class,
-            name_name);
+    if (flags[0] == '\0') {
+        strcat(flags, " ");
+    }
+    if (stream) {
+        fprintf(stream,
+                "%s0x%07lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
+                prefix ? prefix : "",
+                window,
+                flags,
+                attributes.width,
+                attributes.height,
+                attributes.x,
+                attributes.y,
+                class_name,
+                class_class,
+                name_name);
+        fflush(stream);
+    }
     if (class.res_name) {
         XFree(class.res_name);
     }
@@ -599,6 +602,7 @@ void tile_window(Window window,
             window_y += (window_height - hints.max_height) / 2;
             window_height = hints.max_height;
         }
+    } else if (hints.flags & PAspect) {
     }
 
     if (hints.flags & PResizeInc) {
@@ -608,7 +612,6 @@ void tile_window(Window window,
         if (hints.height_inc) {
             window_height -= window_height % hints.height_inc;
         }
-    } else if (hints.flags & PAspect) {
     }
 
     set_net_wm_state(window, net_atoms[_NET_WM_STATE_FULLSCREEN], False);
@@ -647,7 +650,7 @@ void activate_window(Window window) {
 
     active = get_active_window();
 
-    if (window == None) {
+    if (window == None || window == root) {
         if (active && is_normal_window(active)) {
             window = active;
         } else {
@@ -667,14 +670,12 @@ void activate_window(Window window) {
             raise_window(window);
             send_protocol(window, wm_atoms[WM_TAKE_FOCUS]);
             set_window_property(root, net_atoms[_NET_ACTIVE_WINDOW], window);
-            fputc('W', fifo);
-            print_window(fifo, window, FLAG_ACTIVE);
+            print_window(fifo, prefix, window, FLAG_ACTIVE);
         }
     } else if (active) {
         set_window_property(root, net_atoms[_NET_ACTIVE_WINDOW], None);
-        fprintf(fifo, "W0x%07lx\n", None);
+        print_window(fifo, prefix, None, NULL);
     }
-    fflush(fifo);
 }
 
 void iconify_window(Window window, Bool iconify) {
@@ -745,12 +746,12 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
             if (windows[i] == pointer) {
                 strcat(flags, FLAG_POINTER);
             }
-            print_window(response, windows[i], flags);
+            print_window(response, NULL, windows[i], flags);
         }
         if (windows) {
             XFree(windows);
         }
-        print_window(response, root, NULL);
+        print_window(response, NULL, root, NULL);
     } else if (args_len == 1) {
         fprintf(response, "%c", '1');
     } else {
@@ -793,7 +794,6 @@ void handle_command(char *cmd_buf, int cmd_len, FILE *response)
     }
     free(args);
     XSync(display, False);
-    fflush(fifo);
     fflush(response);
     fclose(response);
 }
@@ -915,8 +915,7 @@ void handle_event(XEvent *event) {
                  screen_height != event->xconfigure.height)) {
                 screen_width = event->xconfigure.width;
                 screen_height = event->xconfigure.height;
-                fputc('W', fifo);
-                print_window(fifo, root, NULL);
+                print_window(fifo, prefix, root, NULL);
             }
             break;
         case PropertyNotify:
@@ -924,8 +923,7 @@ void handle_event(XEvent *event) {
             if ((event->xproperty.atom == XA_WM_NAME ||
                  event->xproperty.atom == net_atoms[_NET_WM_NAME]) &&
                 window == get_active_window()) {
-                fputc('W', fifo);
-                print_window(fifo, event->xproperty.window, FLAG_ACTIVE);
+                print_window(fifo, prefix, event->xproperty.window, FLAG_ACTIVE);
             }
             /* else if (event->xproperty.atom == net_atoms[_NET_WM_STATE] && */
             /*            is_managed_window(window)) { */
@@ -980,7 +978,6 @@ void handle_event(XEvent *event) {
             break;
     }
     XSync(display, False);
-    fflush(fifo);
 }
 
 void handle_signal(int signal) {
@@ -991,8 +988,7 @@ void handle_signal(int signal) {
 
 int main(int argc, char *argv[]) {
     int opt;
-    char *fifo_path;
-    struct stat fifo_stat;
+    char *fifo_path = NULL;
     int fifo_fd;
     int x_fd;
     char *sock_dir;
@@ -1000,20 +996,18 @@ int main(int argc, char *argv[]) {
     struct sockaddr_un sock_addr;
     fd_set fds;
 
-    fifo_path = getenv("STATUS_FIFO");
-    while ((opt = getopt(argc, argv, "s:")) != -1) {
+    while ((opt = getopt(argc, argv, "p:s:")) != -1) {
         switch (opt) {
+            case 'p':
+                prefix = optarg;
+                break;
             case 's':
                 fifo_path = optarg;
                 break;
+            case '?':
+                fprintf(stderr, "\n");
+                exit(EXIT_FAILURE);
         }
-    }
-
-    if (!fifo_path ||
-        stat(fifo_path, &fifo_stat) ||
-        !S_ISFIFO(fifo_stat.st_mode)) {
-        fprintf(stderr, "\n");
-        fifo_path = "/dev/null";
     }
 
     if (!(display = XOpenDisplay(NULL))) {
@@ -1069,7 +1063,7 @@ int main(int argc, char *argv[]) {
     }
 
     sock_addr.sun_family = AF_UNIX;
-    snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s/wmd%s", sock_dir, XDisplayString(display));
+    snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s/wmd%s", sock_dir, XDisplayString(display) + 1);
     sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock_fd == -1) {
         fprintf(stderr, "\n");
@@ -1114,8 +1108,7 @@ int main(int argc, char *argv[]) {
                     XInternAtom(display, "UTF8_STRING", False), 8,
                     PropModeReplace, (unsigned char *) "wmd", 3);
 
-    fputc('W', fifo);
-    print_window(fifo, root, NULL);
+    print_window(fifo, prefix, root, NULL);
 
     while(!restart && !quit) {
         FD_ZERO(&fds);

@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
         sock_dir = "/tmp";
 
     sock_addr.sun_family = AF_UNIX;
-    snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s/wmd%s", sock_dir, dpy);
+    snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s/wmd%s", sock_dir, dpy + 1);
     sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (connect(sock_fd, (struct sockaddr *) &sock_addr, sizeof(sock_addr)) == 1)
     {
