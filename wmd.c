@@ -486,6 +486,8 @@ void print_window(FILE *stream, char *prefix, Window window, char *global_flags)
 
     if (window == root) {
         strcat(flags, FLAG_ROOT);
+        attributes.width = screen_width;
+        attributes.height = screen_height;
     } else if (window != None) {
         XGetWindowAttributes(display, window, &attributes);
         if (is_net_wm_state_set(window, net_atoms[_NET_WM_STATE_FULLSCREEN])) {
@@ -511,15 +513,12 @@ void print_window(FILE *stream, char *prefix, Window window, char *global_flags)
             name_name = (char *)name.value;
         }
     }
-    if (flags[0] == '\0') {
-        strcat(flags, " ");
-    }
     if (stream) {
         fprintf(stream,
                 "%s0x%07lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
                 prefix ? prefix : "",
                 window,
-                flags,
+                *flags ? flags : " ",
                 attributes.width,
                 attributes.height,
                 attributes.x,
