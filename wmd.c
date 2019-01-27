@@ -896,7 +896,11 @@ void handle_event(XEvent *event) {
             configure_window(&event->xconfigurerequest);
             break;
         case FocusIn:
-            activate_window(None);
+            if ((event->xfocus.mode == NotifyNormal ||
+                 event->xfocus.mode == NotifyWhileGrabbed) &&
+                event->xfocus.window == root) {
+                activate_window(None);
+            }
             break;
         case ConfigureNotify:
             if (event->xconfigure.window == root &&
