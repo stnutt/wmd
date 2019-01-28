@@ -42,6 +42,7 @@ enum {
     _NET_SUPPORTED,
     _NET_ACTIVE_WINDOW,
     _NET_WM_NAME,
+    _NET_WM_PID,
     /* _NET_CLIENT_LIST, */
     _NET_SUPPORTING_WM_CHECK,
     _NET_WM_STATE,
@@ -478,8 +479,8 @@ void print_window(FILE *stream, char *prefix, Window window, char *global_flags)
     name.value = NULL;
     char flags[FLAG_COUNT];
     flags[0] = '\0';
+    unsigned char *pid = NULL;
 
-    // TODO include pid?
     if (global_flags) {
         strcat(flags, global_flags);
     }
@@ -499,6 +500,7 @@ void print_window(FILE *stream, char *prefix, Window window, char *global_flags)
         if (get_wm_state(window) == IconicState) {
             strcat(flags, FLAG_ICONIC);
         }
+        pid = get_property(window, net_atoms[_NET_WM_PID], 1, XA_CARDINAL);
 
         XGetClassHint(display, window, &class);
         if (class.res_name) {
@@ -515,7 +517,7 @@ void print_window(FILE *stream, char *prefix, Window window, char *global_flags)
     }
     if (stream) {
         fprintf(stream,
-                "%s0x%07lx\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
+                "%s0x%07lx\t%s\t%d\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n",
                 prefix ? prefix : "",
                 window,
                 *flags ? flags : " ",
@@ -523,10 +525,14 @@ void print_window(FILE *stream, char *prefix, Window window, char *global_flags)
                 attributes.height,
                 attributes.x,
                 attributes.y,
+                pid ? *(int *) pid : 0,
                 class_name,
                 class_class,
                 name_name);
         fflush(stream);
+    }
+    if (pid) {
+        XFree(pid);
     }
     if (class.res_name) {
         XFree(class.res_name);
@@ -1027,6 +1033,7 @@ int main(int argc, char *argv[]) {
     net_atoms[_NET_SUPPORTING_WM_CHECK] = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", False);
     net_atoms[_NET_ACTIVE_WINDOW] = XInternAtom(display, "_NET_ACTIVE_WINDOW", False);
     net_atoms[_NET_WM_NAME] = XInternAtom(display, "_NET_WM_NAME", False);
+    net_atoms[_NET_WM_PID] = XInternAtom(display, "_NET_WM_PID", False);
     net_atoms[_NET_WM_STATE] = XInternAtom(display, "_NET_WM_STATE", False);
     net_atoms[_NET_WM_STATE_ABOVE] = XInternAtom(display, "_NET_WM_STATE_ABOVE", False);
     net_atoms[_NET_WM_STATE_FULLSCREEN] = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False);
